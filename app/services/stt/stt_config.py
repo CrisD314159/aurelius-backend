@@ -20,4 +20,4 @@ class STTConfig:
     stt_beam_size: int = 5
     stt_vad_filter: bool = True
 
-    stt_models_dir: str = "./stt_models"
+    stt_models_dir: str = "/app/stt_models"
