@@ -3,6 +3,7 @@
 """
 import asyncio
 import io
+import os
 from faster_whisper import WhisperModel
 from app.services.stt.stt_config import STTConfig
 from app.exceptions.exception_handling import STTException
@@ -23,6 +24,7 @@ class STTService:
         """
         try:
 
+            os.makedirs(self.config.stt_models_dir, exist_ok=True)
             self.model = WhisperModel(
                 model_size_or_path=self.config.stt_model_size,
                 device=self.config.stt_device,

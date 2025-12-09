@@ -10,7 +10,7 @@ class TTSService:
         print(f"Using {self.device} for TTS")
         self.tts_model = TTS(
             "tts_models/multilingual/multi-dataset/xtts_v2").to(self.device)
-        self.voice_seed_path = "/app/utils/voice_seed/friday.mp3"
+        self.voice_seed_path = "app/utils/voice_seed/friday.mp3"
 
     async def stream_audio_response(self,
                                     websocket: WebSocket,

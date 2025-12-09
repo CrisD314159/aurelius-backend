@@ -5,3 +5,9 @@ app/stt_models/*
 # the empty folder to be tracked). The following rule prevents `.gitkeep`
 # from being ignored.
 !app/stt_models/.gitkeep
+
+#venv
+.venv
+
+#venv content
+.venv/*

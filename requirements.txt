@@ -148,12 +148,12 @@ thinc==8.3.9
 threadpoolctl==3.6.0
 tokenizers==0.22.1
 tomli==2.3.0
-torch==2.8.0
-torchaudio==2.8.0
-torchvision==0.23.0
+torch==2.1.2
+torchvision==0.16.2
+torchaudio==2.1.2
 tqdm==4.67.1
 trainer==0.0.36
-transformers==4.57.3
+transformers==4.37.2
 TTS==0.22.0
 typeguard==4.4.4
 typer==0.20.0
