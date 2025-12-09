@@ -1,16 +1,23 @@
 """
 This module is the entrypoint for the backed of aurelius desktop app
 """
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.call_router import router as call_router
 from app.api.user_router import user_router
+from app.services.stt.stt_config import STTConfig
+from app.services.stt.stt_service import STTService
+from app.services.llm.llm_service import LLMService
+from app.utils.model_loading.model_loading import lifespan
+
 
 app = FastAPI(
     title="Aurelius Backend",
     description="""This API handles everithing related to TTS, STT
     and LLM services for aurelius desktop app""",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 origins = [

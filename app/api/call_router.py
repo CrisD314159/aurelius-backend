@@ -6,10 +6,10 @@ import io
 import math
 import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from app.services.stt.stt_config import STTConfig
+from app.utils.wav_converter.wav_converter import WavConverter
+from app.utils.model_loading.model_loading import aurelius_models
 from app.services.stt.stt_service import STTService
 from app.services.llm.llm_service import LLMService
-from app.utils.wav_converter.wav_converter import WavConverter
 
 
 router = APIRouter()
@@ -23,6 +23,12 @@ class ConnectionManager:
 
     def __init__(self):
         self.active_connections: List[WebSocket] = []
+
+    def get_llm_model(self):
+        return aurelius_models['llm']
+
+    def get_stt_model(self):
+        return aurelius_models['stt']
 
     async def connect(self, websocket: WebSocket):
         """This method receives a websocket from the frontend"""
@@ -81,9 +87,8 @@ async def electron_prompt(websocket: WebSocket):
     """
     await manager.connect(websocket=websocket)
 
-    stt_config = STTConfig()
-    stt_service = STTService(config=stt_config)
-    llm_service = LLMService(websocket=websocket)
+    stt_service: STTService = manager.get_stt_model()
+    llm_service: LLMService = manager.get_llm_model()
 
     audio_buffer = bytearray()
     silence_counter = 0
@@ -119,19 +124,17 @@ async def electron_prompt(websocket: WebSocket):
 
                         wav_stream = io.BytesIO(wav_bytes_to_send)
 
-                        result = await stt_service.transcript_audio(wav_stream)
-                        transcription = result.get("text", "")
+                        transcription = await stt_service.transcript_audio(wav_stream)
+                        print(transcription)
 
                     except Exception as e:
                         print(
                             f"Error during audio processing/transcription: {e}")
 
-                    transcription = ""
-
                     if transcription.strip():
                         print(f"Transcription: {transcription}")
 
-                        answer = await llm_service.assemble_prompt(transcription)
+                        answer = await llm_service.assemble_prompt(transcription, websocket=websocket)
                         print(f"LLM Response: {answer}")
 
                         # Send response back to front (this will be replaced with the tts answer)

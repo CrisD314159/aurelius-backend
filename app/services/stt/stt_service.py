@@ -77,7 +77,7 @@ class STTService:
                 "segments": segments_list,
             }
 
-            return result
+            return result["text"]
 
         except Exception as e:
             raise STTException(
