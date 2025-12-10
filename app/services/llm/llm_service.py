@@ -1,58 +1,88 @@
-from ollama import chat
+"""
+This module contains a class designed to handle all the services related with llm
+"""
 
-from app.db.init_db import AureliusDB
-from app.services.tts.tts_service import TTSService
+import re
 from fastapi import WebSocket
+from ollama import chat
+from app.db.init_db import AureliusDB
+from app.services.tts.tts_kokoro_service import TTSKokoroService
 
 
 class LLMService:
+    """
+    Integrates all the code to handle requests and answers from the llm
+    """
 
     def __init__(self):
         self.db_context = AureliusDB()
-        self.tts_model = TTSService()
+        self.tts_model = TTSKokoroService()
 
     async def assemble_prompt(self, user_prompt, websocket: WebSocket):
+        """
+        retrieves all the user context and generates the prompt for the llm
+        """
         user_context_dict = self.retrieve_user_context()
         last_chat_summary = self.retrieve_user_last_chats_summaries()
         user_model = self.db_context.get_user_model()
-        response_format_message = self.get_response_format()
 
         user_message = {
             "role": "user",
             "content": user_prompt
         }
 
-        messages = [user_context_dict, last_chat_summary,
-                    response_format_message, user_message]
+        messages = [user_context_dict, last_chat_summary, user_message]
 
         print(messages)
         print(user_model)
 
         await self.generate_response(messages, user_model, websocket=websocket)
-        return "done"
 
     async def generate_response(self, messages, model, websocket: WebSocket):
+        """
+        Generates the llm response for the user using chunks and the TTS model provided
+        """
         response = chat(model=model, messages=messages, stream=True)
         response_buffer = ""
         entire_response = ""
+
+        sentence_separator = re.compile(
+            r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|!)\s+')
+
         for chunk in response:
             response_text = chunk['message']['content']
             print(response_text)
             entire_response += response_text
             response_buffer += response_text
-            # if len(response_buffer) > 50:
-            #     await self.tts_model.stream_audio_response(
-            #         websocket=websocket, text=response_buffer)
-            #     response_buffer = ""
 
-            # manejo con el tts no integrado (en construcción)
+            parts = sentence_separator.split(response_buffer)
+            print(parts)
+            if len(parts) > 1:
+                for sentence in parts[:-1]:
+                    if sentence.strip() and len(sentence.strip()) > 3:
+                        print(f"Procesando chunk: {sentence}")
+                        await self.tts_model.stream_audio_response(
+                            websocket=websocket, text=sentence)
 
-        print(entire_response)
+                response_buffer = parts[-1]
+
+        if response_buffer.strip():
+            print(f"Procesando resto final: {response_buffer}")
+            await self.tts_model.stream_audio_response(
+                websocket=websocket, text=response_buffer)
+
+        print(f"respuesta completa: {entire_response}")
 
     def extract_and_save_context(self, answer):
+        """
+        Extracts the context from the llm response
+        """
         pass
 
     def retrieve_user_context(self):
+        """
+        Retrieves the user stored context
+        """
         user_context_dict = self.db_context.load_memory()
         user_data = self.db_context.get_user_data()
         user_name = "Not provided"
@@ -77,13 +107,16 @@ class LLMService:
 
              {memory_lines}
 
-            Important: Always use this information to enhance context, continuity and personalization.
+             Important: Always use this information to enhance context, continuity and personalization.
                """
         }
 
         return user_context_message
 
     def retrieve_user_last_chats_summaries(self):
+        """
+        Retrieves the user last chat summary
+        """
         last_chat_summary = self.db_context.get_summary()
         user_data = self.db_context.get_user_data()
         user_name = "Not provided"
@@ -108,43 +141,10 @@ class LLMService:
 
         return last_chat_message
 
-    def get_response_format(self):
-        return {
-            "role": "system",
-            "content": """
-                RESPONSE FORMAT INSTRUCTIONS:
-
-                1. Respond normally and helpfully to the user.
-
-                2. After your response, you MAY optionally include suggested memory variables
-                and/or a conversation summary. These suggestions help the system store
-                useful long-term information.
-
-                3. Always include BOTH sections below, even if empty:
-
-                <context_suggestions>
-                (key:value pairs in snake_case only. One per line.)
-                </context_suggestions>
-
-                <summary_suggestions>
-                (A short 1–3 sentence summary of the current conversation, optional.)
-                </summary_suggestions>
-
-                Rules:
-                - Do NOT explain the tags.
-                - Do NOT wrap them in code blocks.
-                - Suggested variables must be factual, stable, and useful for future interactions.
-                - If you have no suggestions, leave the tags empty like this:
-
-                <context_suggestions>
-                </context_suggestions>
-
-                <summary_suggestions>
-                </summary_suggestions>
-            """
-        }
-
     def get_aurelius_identity(self):
+        """
+        Gives the context to the llm about the identity aurelius
+        """
         identity_message = {
             "role": "system",
             "content": """
