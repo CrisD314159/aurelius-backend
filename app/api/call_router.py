@@ -99,6 +99,8 @@ async def electron_prompt(websocket: WebSocket):
             chunk = await websocket.receive_bytes()
             audio_buffer.extend(chunk)
 
+            # TODO : Add interrupt functionality
+
             if manager.is_silence(chunk):
                 silence_counter += 1
             else:
@@ -107,7 +109,7 @@ async def electron_prompt(websocket: WebSocket):
             print(
                 f"Silence counter: {silence_counter}/{9}")
 
-            if silence_counter >= 7 and len(audio_buffer) >= min_audio_length:
+            if silence_counter >= 8 and len(audio_buffer) >= min_audio_length:
 
                 await websocket.send_text("silence")
 
@@ -134,9 +136,9 @@ async def electron_prompt(websocket: WebSocket):
                     if transcription.strip():
                         print(f"Transcription: {transcription}")
 
-                        await llm_service.assemble_prompt(transcription, websocket=websocket)
-
-                        await websocket.send_text("TTS_END")
+                        response = await llm_service.assemble_prompt(transcription, websocket=websocket)
+                        if response:
+                            await websocket.send_text("TTS_END")
                     else:
                         print("Empty transcription - no speech detected")
 
