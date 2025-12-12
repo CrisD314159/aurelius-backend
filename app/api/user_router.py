@@ -81,7 +81,7 @@ def get_installed_models(user_service: UserService = Depends()):
     """
     if user_service.is_ollama_installed():
         available_models = user_service.retrieve_ollama_models_list()
-        return {"success": True, "message": available_models['models']}
+        return {"success": True, "message": available_models}
     return JSONResponse(
         status_code=status.HTTP_412_PRECONDITION_FAILED,
         content={"succes": False,

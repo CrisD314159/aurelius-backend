@@ -7,7 +7,8 @@ import math
 import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.utils.wav_converter.wav_converter import WavConverter
-from app.utils.model_loading.model_loading import aurelius_models
+from app.utils.model_loading.model_loading import aurelius_models, database_instances
+from app.db.init_db import AureliusDB
 from app.services.stt.stt_service import STTService
 from app.services.llm.llm_service import LLMService
 
@@ -29,6 +30,9 @@ class ConnectionManager:
 
     def get_stt_model(self):
         return aurelius_models['stt']
+
+    def get_database_instance(self):
+        return database_instances["sqlite"]
 
     async def connect(self, websocket: WebSocket):
         """This method receives a websocket from the frontend"""
@@ -89,6 +93,7 @@ async def electron_prompt(websocket: WebSocket):
 
     stt_service: STTService = manager.get_stt_model()
     llm_service: LLMService = manager.get_llm_model()
+    database: AureliusDB = manager.get_database_instance()
 
     audio_buffer = bytearray()
     silence_counter = 0

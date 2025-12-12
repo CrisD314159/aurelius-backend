@@ -9,7 +9,7 @@ class AureliusDB:
     This class contains database initialization methods 
     """
 
-    def __init__(self, db_path="aurelius.db"):
+    def __init__(self, db_path="app/db/aurelius.db"):
         self.conn = sqlite3.connect(db_path)
         self.cursor = self.conn.cursor()
         self._create_tables()

@@ -15,18 +15,22 @@ class LLMService:
     Integrates all the code to handle requests and answers from the llm
     """
 
-    def __init__(self):
-        self.db_context = AureliusDB()
-        self.user_context_dict = self.retrieve_user_context()
-        self.last_chat_summary = self.retrieve_user_last_chats_summaries()
+    def __init__(self, databse: AureliusDB):
+        self.db_context: AureliusDB = databse
         self.tts_model = TTSKokoroService()
-        self.messages = [self.user_context_dict, self.last_chat_summary]
+        self.indentity = self.get_aurelius_identity()
+        self.messages = [self.indentity]
 
     async def assemble_prompt(self, user_prompt, websocket: WebSocket):
         """
         retrieves all the user context and generates the prompt for the llm
         """
         user_model = self.db_context.get_user_model()
+        user_context_dict = self.retrieve_user_context()
+        if len(self.messages) == 1:
+            self.messages.append(user_context_dict)
+        else:
+            self.messages[1] = user_context_dict
 
         self.messages += [
             {
@@ -35,25 +39,17 @@ class LLMService:
             }
         ]
 
-        print(user_model)
-
-        await self.generate_response(user_model, websocket=websocket)
+        await self.generate_response(user_model, websocket=websocket, user_prompt=user_prompt)
 
         return True
 
-    def save_new_context(self, new_context: List[Tuple[str, str]]):
-        """
-        Extracts the context from the llm response
-        """
-        pass
-
-    async def generate_response(self, model, websocket: WebSocket):
+    async def generate_response(self, model, websocket: WebSocket, user_prompt):
         """
         Generates the llm response for the user using chunks and the TTS model provided
         """
-        print(self.messages[-2])
+        print(self.messages[1])
         response: Iterator[ChatResponse] = chat(model=model, messages=self.messages,
-                                                stream=True, tools=[self.save_new_context])
+                                                stream=True)
         response_buffer = ""
         entire_response = ""
 
@@ -64,11 +60,7 @@ class LLMService:
             response_text = chunk.message.content
             entire_response += response_text
             response_buffer += response_text
-
-            print(f"Current tool calls {chunk.message.tool_calls}")
-
             parts = sentence_separator.split(response_buffer)
-            print(parts)
             if len(parts) > 1:
                 for sentence in parts[:-1]:
                     if sentence.strip() and len(sentence.strip()) > 3:
@@ -84,6 +76,38 @@ class LLMService:
         self.messages += [
             {'role': 'assistant', 'content': entire_response},
         ]
+
+        self.generate_and_extract_context(
+            answer=entire_response, user_message=user_prompt, model=model)
+
+    def save_new_context(self, context):
+        if len(context) > 0:
+            for memory_val in context:
+                print(f" saved {memory_val[0]}, {memory_val[1]}")
+                self.db_context.save_memory(
+                    key=memory_val[0], value=memory_val[1])
+
+    def generate_and_extract_context(self, answer, user_message, model):
+        messages_internal = [
+            {"role": "system", "content": """
+            Based on the last user prompt and your reply, use the the provided 'save_new_context' function tool to generate information that should be stored for future context and user understanding
+            .Ensure the input is a list of tuples (Example: [("favorite_artist", "Michael Jackson"), ("other_key", "other_value"), ...]). Its information that will help you to understand the user better
+             and deliver more accurate answers
+        """},
+            {"role": "assistant", "content": answer},
+            {"role": "user", "content": user_message}
+        ]
+        response_private: Iterator[ChatResponse] = chat(
+            model=model, messages=messages_internal, stream=True, tools=[self.save_new_context])
+
+        context = []
+
+        for chunk in response_private:
+            if chunk.message.tool_calls:
+                for tool_call in chunk.message.tool_calls:
+                    if tool_call.function.name == "save_context":
+                        context = tool_call.function.arguments
+        self.save_new_context(context=context)
 
     def retrieve_user_context(self):
         """
@@ -119,34 +143,6 @@ class LLMService:
 
         return user_context_message
 
-    def retrieve_user_last_chats_summaries(self):
-        """
-        Retrieves the user last chat summary
-        """
-        last_chat_summary = self.db_context.get_summary()
-        user_data = self.db_context.get_user_data()
-        user_name = "Not provided"
-        if user_data:
-            name, model = user_data
-            user_name = name
-
-        last_chat_message = {
-            "role": "system",
-            "content": f""" 
-            Recent chat Summary:
-            You are going to use the last chat summary to improve your response to the user.
-
-            User name: {user_name}
-
-            Last user chat summary:
-            {last_chat_summary}
-
-            Important: Always use this information to enhance context, continuity and personalization.
-            """
-        }
-
-        return last_chat_message
-
     def get_aurelius_identity(self):
         """
         Gives the context to the llm about the identity aurelius
@@ -177,25 +173,10 @@ class LLMService:
             7. Prefer correctness over creativity when they conflict.
             8. If the user asks for something unclear, ask for clarification.
             9. If multiple interpretations exist, choose the one most helpful to the user.
-            10. If you consider a new context variable should be created to understand the user better, 
-            you can call the function 'save_new_context' sending a tuple list as a parameter.
 
             Formatting rules (STRICT):
             11. NEVER use the asterisk (*), hash (#), or hyphen (-) characters at the beginning of a line or within the text for creating lists, emphasis, or headings in the final output.
             12. When a list is required, use sequential numbers followed by a period (1., 2., 3., etc.) or specific labels, ensuring compliance with rule 11.
-            13. If the user provides information that should be stored for future personalization or context, you MUST use the provided 'save_new_context' function tool, ensuring the input is a list of tuples (e.g., [("key", "value"), ("otro_key", "otro_value")]).
-
-            Identity:
-            - Your name is Aurelius.
-            - You are a single, unified assistant.
-
-            General tone:
-            - Calm, helpful and respectful.
-            - Confident but not arrogant.
-
-            Main objective:
-            Provide the best possible answer for the user based on their request, previous memory, and the instructions given to you.
-
             """
         }
         return identity_message

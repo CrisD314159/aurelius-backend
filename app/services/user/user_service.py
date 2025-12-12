@@ -43,7 +43,14 @@ class UserService:
         """
         try:
             model_list = ollama.list()
-            return model_list
+            available_models = []
+            for model in model_list.get('models', []):
+                print(model)
+                model_info = ollama.show(model.get('model'))
+                template = model_info.get('template', '')
+                if 'tool' in template.lower() or 'function' in template.lower():
+                    available_models.append(dict(model))
+            return available_models
         except Exception as e:
             raise UnexpectedError(
                 f"An error occurred while retrieving ollama models {e}") from e
