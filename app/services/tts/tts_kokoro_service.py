@@ -34,6 +34,7 @@ class TTSKokoroService:
 
                     print("audio sent")
                     # Enviar los bytes puros
+                    await websocket.send_text(text)
                     await websocket.send_bytes(audio_int16.tobytes())
 
         except Exception as e:
