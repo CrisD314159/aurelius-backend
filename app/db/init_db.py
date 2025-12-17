@@ -13,6 +13,7 @@ class AureliusDB:
         self.conn = sqlite3.connect(db_path)
         self.cursor = self.conn.cursor()
         self._create_tables()
+        self.user_id = 1
 
     def _create_tables(self):
         self.cursor.execute("""
@@ -25,30 +26,33 @@ class AureliusDB:
         """)
 
         self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS recent_messages (
+        CREATE TABLE IF NOT EXISTS chats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            user_id INTEGER,
+            title TEXT,
+            date_created DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES user_info(id)
+        )
+        """)
+
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_interactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER,
+            user_message TEXT,
+            model_message TEXT,
+            message_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (chat_id) REFERENCES chats(id)
         )
         """)
 
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_memory_context (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            key TEXT UNIQUE,
-            value TEXT,
+            var TEXT,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
         """)
-
-        self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS conversation_context (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            summary TEXT,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-        """)
-
         self.conn.commit()
 
     def register_user(self, name, model):
@@ -58,7 +62,7 @@ class AureliusDB:
         self.cursor.execute("""
         INSERT INTO user_info (id, name, current_model)
         VALUES (?, ?, ?)
-    """, (1, name, model))
+    """, (self.user_id, name, model))
         self.conn.commit()
 
     def is_user_registerd(self):
@@ -68,7 +72,7 @@ class AureliusDB:
         """
         self.cursor.execute("""
         SELECT name FROM user_info WHERE id = ?
-    """, (1,))
+    """, (self.user_id,))
 
         return self.cursor.fetchone()
 
@@ -78,7 +82,7 @@ class AureliusDB:
         """
         self.cursor.execute("""
         SELECT name, current_model FROM user_info WHERE id = ?
-    """, (1,))
+    """, (self.user_id,))
 
         return self.cursor.fetchone()
 
@@ -91,82 +95,27 @@ class AureliusDB:
             SET name = ?,
             current_model =? 
         WHERE id = ?
-    """, (name, model, 1))
+    """, (name, model, self.user_id))
         self.conn.commit()
 
-    def add_message(self, content):
-        """
-        This method adds a recent message to the datebase
-        """
-        self.cursor.execute("""
-        INSERT INTO recent_messages (content)
-        VALUES (?)
-        """, (content,))
-        self.conn.commit()
-
-    def get_recent_messages(self, limit=5):
-        """
-        This method gets the 10 recent message from the user
-        """
-        self.cursor.execute("""
-        SELECT content FROM recent_messages
-        ORDER BY id DESC
-        LIMIT ?
-        """, (limit,))
-        return self.cursor.fetchall()[::-1]
-
-    def clear_old_messages(self, keep=10):
-        """
-        This method clears all the old messages between the llm and the user
-        """
-        self.cursor.execute("""
-        DELETE FROM recent_messages
-        WHERE id NOT IN (
-            SELECT id FROM recent_messages ORDER BY id DESC LIMIT ?
-        )
-        """, (keep,))
-        self.conn.commit()
-
-    def save_memory(self, key, value):
+    def save_memory(self, var):
         """
         This method saves an important value for understand better the user
         context
         """
         self.cursor.execute("""
-        INSERT INTO user_memory_context (key, value)
-        VALUES (?, ?)
-        ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
-        """, (key, value))
+        INSERT INTO user_memory_context (var)
+        VALUES (?)
+        """, (var,))
         self.conn.commit()
 
     def load_memory(self):
         """
         This method loads all the memories saved from the user to improve context
         """
-        self.cursor.execute("SELECT key, value FROM user_memory_context")
-        return dict(self.cursor.fetchall())
-
-    def save_summary(self, summary):
-        """
-        This method saves a summary of recent conversations 
-        to improve futire conversations context
-        """
-        self.cursor.execute("""
-        INSERT INTO conversation_context (summary)
-        VALUES (?)
-        """, (summary,))
-        self.conn.commit()
-
-    def get_summary(self):
-        """
-        This method gets the summary of the last conversation to improve context
-        """
-        self.cursor.execute("""
-        SELECT summary FROM conversation_context
-        ORDER BY id DESC LIMIT 1
-        """)
-        row = self.cursor.fetchone()
-        return row[0] if row else ""
+        self.cursor.execute("SELECT * FROM user_memory_context")
+        rows = self.cursor.fetchall()
+        return [row[0] for row in rows]
 
     def get_user_model(self):
         """
@@ -178,3 +127,64 @@ class AureliusDB:
 
         row = self.cursor.fetchone()
         return row[0] if row else ""
+
+    def get_user_chats(self):
+        """
+            Gets all the chat history from the user
+        """
+        self.cursor.execute("""
+            SELECT * FROM chats WHERE user_id = ?
+
+        """, (self.user_id,))
+
+        rows = self.cursor.fetchall()
+        return rows if len(rows) > 0 else []
+
+    def get_chat_content(self, chat_id):
+        """
+            Gets all the chat content including messages
+        """
+        self.cursor.execute("""
+            SELECT * FROM chat_interactions WHERE chat_id = ?
+            ORDER BY message_date ASC
+
+        """, (chat_id, ))
+
+        rows = self.cursor.fetchall()
+        return rows
+
+    def create_chat(self, title):
+        """
+        Creates a new chat
+        """
+        self.cursor.execute("""
+            INSERT INTO chats (user_id, title)
+            VALUES(?, ?)
+
+        """, (self.user_id, title,))
+        self.conn.commit()
+
+    def store_interaction(self, chat_id, user_prompt, llm_answer):
+        """
+            Stores a new interaction between the user and the llm
+        """
+        self.cursor.execute("""
+        INSERT INTO chat_interactions (chat_id, user_message, model_message)
+        VALUES (?, ?, ?)
+
+        """, (chat_id, user_prompt, llm_answer,))
+        self.conn.commit()
+
+    def delete_chat(self, chat_id):
+        """
+        Deletes a chat and its content
+        """
+        self.cursor.execute("""
+            DELETE FROM chat_interactions WHERE chat_id = ?
+
+        """, (chat_id, ))
+
+        self.cursor.execute("""
+            DELETE FROM chats WHERE id = ?
+        """, (chat_id, ))
+        self.conn.commit()
