@@ -45,7 +45,6 @@ class UserService:
             model_list = ollama.list()
             available_models = []
             for model in model_list.get('models', []):
-                print(model)
                 model_info = ollama.show(model.get('model'))
                 template = model_info.get('template', '')
                 if 'tool' in template.lower() or 'function' in template.lower():

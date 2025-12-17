@@ -1,4 +1,4 @@
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, WebSocket
 
 
 class AureliusException(HTTPException):
@@ -63,3 +63,20 @@ class NotFoundException(AureliusException):
             message=detail,
             detail=detail
         )
+
+
+async def socket_exeption_handling(
+        ws: WebSocket,
+        error_type: str,
+        message: str,
+        details: str | None
+
+):
+    """
+    Method used to handle websocket exceptions
+    """
+    await ws.send_json({
+        "type": error_type,
+        "message": message,
+        "details": details
+    })

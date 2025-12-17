@@ -3,6 +3,7 @@ import numpy as np
 from fastapi import WebSocket
 from kokoro import KPipeline
 from app.exceptions.exception_handling import TTSException
+from app.exceptions.exception_handling import socket_exeption_handling
 
 
 class TTSKokoroService:
@@ -34,9 +35,13 @@ class TTSKokoroService:
 
                     print("audio sent")
                     # Enviar los bytes puros
-                    await websocket.send_text(text)
+                    await websocket.send_json({
+                        "type": "answer",
+                        "message": text
+                    })
                     await websocket.send_bytes(audio_int16.tobytes())
 
         except Exception as e:
-            raise TTSException(
-                f"An error occurred during Kokoro TTS streaming: {e}") from e
+            await socket_exeption_handling(ws=websocket, error_type="error",
+                                           message="An error occurred on TTS service",
+                                           details=str(e))

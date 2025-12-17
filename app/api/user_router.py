@@ -87,3 +87,24 @@ def get_installed_models(user_service: UserService = Depends()):
         content={"succes": False,
                  "message": "You don't have ollama installed on your machine"}
     )
+
+
+@user_router.get("/user/getConfig")
+def get_user_configuration(user_service: UserService = Depends()):
+    """
+    This method gets the user info and the available models
+
+    :param user_service: Description
+    :type user_service: UserService
+    """
+    if user_service.is_ollama_installed() and user_service.is_user_regitered():
+        available_models = user_service.retrieve_ollama_models_list()
+        user_info = user_service.get_user_data()
+        grouped_data = {"user_data": user_info,
+                        "available_models": available_models}
+        return {"success": True, "message": grouped_data, }
+    return JSONResponse(
+        status_code=status.HTTP_412_PRECONDITION_FAILED,
+        content={"succes": False,
+                 "message": "You don't have ollama installed on your machine"}
+    )
