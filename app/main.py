@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.call_router import router as call_router
 from app.api.user_router import user_router
+from app.api.chats_router import chats_router
 from app.utils.model_loading.model_loading import lifespan
 
 
@@ -32,3 +33,4 @@ app.add_middleware(
 
 app.include_router(call_router)
 app.include_router(user_router)
+app.include_router(chats_router)

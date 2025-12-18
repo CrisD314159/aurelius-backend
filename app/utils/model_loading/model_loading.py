@@ -1,3 +1,8 @@
+"""
+This module initializes on the background
+ all the required dependencies before app startup
+"""
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.services.stt.stt_config import STTConfig

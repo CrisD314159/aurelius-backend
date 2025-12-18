@@ -5,6 +5,7 @@ import subprocess
 import ollama
 from app.exceptions.exception_handling import UnexpectedError, NotFoundException
 from app.db.init_db import AureliusDB
+from app.utils.model_loading.model_loading import database_instances
 from app.schemas.schemas import UserSetup
 
 
@@ -15,7 +16,7 @@ class UserService:
     """
 
     def __init__(self):
-        self.database = AureliusDB()
+        self.database: AureliusDB = database_instances['sqlite']
 
     def is_ollama_installed(self):
         """

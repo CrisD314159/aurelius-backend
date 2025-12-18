@@ -162,7 +162,12 @@ class AureliusDB:
             VALUES(?, ?)
 
         """, (self.user_id, title,))
+
+        new_id = self.cursor.lastrowid
+
         self.conn.commit()
+
+        return new_id
 
     def store_interaction(self, chat_id, user_prompt, llm_answer):
         """

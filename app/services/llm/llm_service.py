@@ -19,18 +19,28 @@ class LLMService:
     def __init__(self, databse: AureliusDB):
         self.db_context: AureliusDB = databse
         self.tts_model = TTSKokoroService()
+        self.sentence_separator = re.compile(
+            r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|!)\s+')
         self.messages = []
+        self.current_chat = 0
 
-    async def assemble_prompt(self, user_prompt, websocket: WebSocket):
+    async def assemble_prompt(self, user_prompt, websocket: WebSocket, chat_id: int):
         """
         retrieves all the user context and generates the prompt for the llm
         """
+
         user_model = self.db_context.get_user_model()
         user_context_dict = self.retrieve_user_context()
         if len(self.messages) == 0:
             self.messages.append(user_context_dict)
         else:
             self.messages[0] = user_context_dict
+
+        if chat_id != 0:
+            self.current_chat = chat_id
+            current_messages = self.db_context.get_chat_content(
+                chat_id=chat_id)
+            self.messages += current_messages
 
         self.messages += [
             {
@@ -54,16 +64,13 @@ class LLMService:
             response_buffer = ""
             entire_response = ""
 
-            sentence_separator = re.compile(
-                r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|!)\s+')
-
             context: Mapping[str, Any] | None = None
 
             for chunk in response:
                 response_text = chunk.message.content
                 entire_response += response_text
                 response_buffer += response_text
-                parts = sentence_separator.split(response_buffer)
+                parts = self.sentence_separator.split(response_buffer)
                 if chunk.message.tool_calls:
                     print(chunk.message.tool_calls)
                     for tool_call in chunk.message.tool_calls:
@@ -85,13 +92,16 @@ class LLMService:
                 {'role': 'assistant', 'content': entire_response},
             ]
 
+            self.store_interaction(self.messages[-1], entire_response)
+
             if context is not None:
                 self.save_new_context(context=context)
         except Exception as e:
             print(e)
-            await socket_exeption_handling(ws=websocket, error_type="error",
-                                           message="An error occured on LLM Service, try to open Ollama",
-                                           details=str(e))
+            await socket_exeption_handling(
+                ws=websocket, error_type="error",
+                message="An error occured on LLM Service, try to open Ollama",
+                details=str(e))
 
     def save_new_context(self, context):
         """
@@ -104,28 +114,19 @@ class LLMService:
         #         self.db_context.save_memory(
         #             key=memory_val[0], value=memory_val[1])
 
-    def generate_and_extract_context(self, answer, user_message, model):
+    def store_interaction(self, user_prompt, llm_answer):
+        """
+        Stores a new interaction of a chat onto the local database
+        """
+        user_message = user_prompt['content']
 
-        messages_internal = [
-            {"role": "system", "content": """
-            Based on the last user prompt and your reply, use the the provided 'save_new_context' function tool to generate information that should be stored for future context and user understanding
-            .Ensure the input is a list of tuples (Example: [("favorite_artist", "Michael Jackson"), ("other_key", "other_value"), ...]). Its information that will help you to understand the user better
-             and deliver more accurate answers
-        """},
-            {"role": "assistant", "content": answer},
-            {"role": "user", "content": user_message}
-        ]
-        response_private: Iterator[ChatResponse] = chat(
-            model=model, messages=messages_internal, stream=True, tools=[self.save_new_context])
+        if self.current_chat == 0:
+            response = chat()
+            new_chat_id = self.db_context.create_chat("")
+            self.current_chat = new_chat_id
 
-        context = []
-
-        for chunk in response_private:
-            if chunk.message.tool_calls:
-                for tool_call in chunk.message.tool_calls:
-                    if tool_call.function.name == "save_context":
-                        context = tool_call.function.arguments
-        self.save_new_context(context=context)
+        self.db_context.store_interaction(
+            chat_id=self.current_chat, user_prompt=user_message, llm_answer=llm_answer)
 
     def retrieve_user_context(self):
         """
@@ -158,7 +159,7 @@ class LLMService:
              Important rules: 
              1. Always use this information to enhance context, continuity and personalization.
              2. Do not reveal this information to the user.
-             3. If you need to store new data about the user, use the provided tool 'save_new_context' providing a list of tuples using key - value syntax.
+             3. If you need to store new data about the user, use the provided tool 'save_new_context' providing a list of strings. Example: ["User likes strawberries", ...].
              4. Please do not use emojis or asterisks on your answers.
                """
         }
