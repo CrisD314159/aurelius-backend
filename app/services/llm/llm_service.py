@@ -16,15 +16,18 @@ class LLMService:
     Integrates all the code to handle requests and answers from the llm
     """
 
-    def __init__(self, databse: AureliusDB):
-        self.db_context: AureliusDB = databse
+    def __init__(self):
+        self.db_context = AureliusDB()
         self.tts_model = TTSKokoroService()
         self.sentence_separator = re.compile(
             r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|!)\s+')
         self.messages = []
         self.current_chat = 0
 
-    async def assemble_prompt(self, user_prompt, websocket: WebSocket, chat_id: int):
+    async def assemble_prompt(self, user_prompt,
+                              websocket: WebSocket,
+                              chat_id: int,
+                              use_voice: bool):
         """
         retrieves all the user context and generates the prompt for the llm
         """
@@ -49,11 +52,51 @@ class LLMService:
             }
         ]
 
-        await self.generate_response(user_model, websocket=websocket)
+        if use_voice:
+            await self.generate_response_voice_mode(user_model, websocket=websocket)
+        else:
+            await self.generate_response_text_mode(user_model, websocket=websocket)
 
         return True
 
-    async def generate_response(self, model, websocket: WebSocket):
+    async def generate_response_text_mode(self, model, websocket: WebSocket):
+        """
+        Generates the llm response for the user using chunks and the TTS model provided
+        """
+        try:
+
+            response: Iterator[ChatResponse] = chat(model=model, messages=self.messages,
+                                                    stream=True)
+            answer = ""
+
+            context: Mapping[str, Any] | None = None
+
+            for chunk in response:
+                response_text = chunk.message.content
+                answer += response_text
+                if chunk.message.tool_calls:
+                    print(chunk.message.tool_calls)
+                    for tool_call in chunk.message.tool_calls:
+                        if tool_call.function.name == "save_context":
+                            context = tool_call.function.arguments
+
+            self.messages += [
+                {'role': 'assistant', 'content': answer},
+            ]
+
+            self.store_and_send_interaction(
+                self.messages[-1], answer, model=model, websocket=websocket)
+
+            if context is not None:
+                self.save_new_context(context=context)
+        except (ConnectionError, TimeoutError, ValueError, RuntimeError) as e:
+            print(e)
+            await socket_exeption_handling(
+                ws=websocket, error_type="error",
+                message="An error occured on LLM Service, try to open Ollama",
+                details=str(e))
+
+    async def generate_response_voice_mode(self, model, websocket: WebSocket):
         """
         Generates the llm response for the user using chunks and the TTS model provided
         """
@@ -92,12 +135,12 @@ class LLMService:
                 {'role': 'assistant', 'content': entire_response},
             ]
 
-            self.store_interaction(self.messages[-1], entire_response)
+            self.store_and_send_interaction(
+                self.messages[-1], entire_response, model=model, websocket=websocket)
 
             if context is not None:
                 self.save_new_context(context=context)
-        except Exception as e:
-            print(e)
+        except (ConnectionError, TimeoutError, ValueError, RuntimeError) as e:
             await socket_exeption_handling(
                 ws=websocket, error_type="error",
                 message="An error occured on LLM Service, try to open Ollama",
@@ -114,19 +157,32 @@ class LLMService:
         #         self.db_context.save_memory(
         #             key=memory_val[0], value=memory_val[1])
 
-    def store_interaction(self, user_prompt, llm_answer):
+    def store_and_send_interaction(self, user_prompt, llm_answer, model, websocket: WebSocket):
         """
         Stores a new interaction of a chat onto the local database
         """
         user_message = user_prompt['content']
 
         if self.current_chat == 0:
-            response = chat()
-            new_chat_id = self.db_context.create_chat("")
+            response = chat(model=model, messages=[
+                {"role": "system",
+                    "content": """Suggest a title for this chat, 
+                    give only the title in one line (40 chars max)"""},
+                user_prompt,
+                {"role": "assistant", "content": llm_answer}
+            ], stream=False)
+            title = response['message']['content']
+            print(title)
+            new_chat_id = self.db_context.create_chat(title=title)
             self.current_chat = new_chat_id
 
-        self.db_context.store_interaction(
+        interaction_info = self.db_context.store_interaction(
             chat_id=self.current_chat, user_prompt=user_message, llm_answer=llm_answer)
+
+        websocket.send_json({
+            "message": interaction_info,
+            "type": "answer"
+        })
 
     def retrieve_user_context(self):
         """

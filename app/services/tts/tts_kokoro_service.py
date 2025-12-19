@@ -1,12 +1,19 @@
+"""
+This module contains a class used for convert text to voice
+"""
+
 import torch
 import numpy as np
 from fastapi import WebSocket
 from kokoro import KPipeline
-from app.exceptions.exception_handling import TTSException
 from app.exceptions.exception_handling import socket_exeption_handling
 
 
 class TTSKokoroService:
+    """
+    This class contains a TTS model that converts text into natural voice
+    """
+
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Using {self.device} for Kokoro TTS")
@@ -35,13 +42,9 @@ class TTSKokoroService:
 
                     print("audio sent")
                     # Enviar los bytes puros
-                    await websocket.send_json({
-                        "type": "answer",
-                        "message": text
-                    })
                     await websocket.send_bytes(audio_int16.tobytes())
 
-        except Exception as e:
+        except (RuntimeError, ValueError, ConnectionError, OSError) as e:
             await socket_exeption_handling(ws=websocket, error_type="error",
                                            message="An error occurred on TTS service",
                                            details=str(e))

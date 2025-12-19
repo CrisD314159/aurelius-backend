@@ -178,7 +178,17 @@ class AureliusDB:
         VALUES (?, ?, ?)
 
         """, (chat_id, user_prompt, llm_answer,))
+
+        new_interaction_id = self.cursor.lastrowid
         self.conn.commit()
+
+        self.cursor.execute("""
+            SELECT message_date from chat_interactions
+        """)
+        row = self.cursor.fetchone()
+
+        return {"id": new_interaction_id,  "chat_id": chat_id, "user_message": user_prompt,
+                "model_message": llm_answer, "message_date": row[0]}
 
     def delete_chat(self, chat_id):
         """

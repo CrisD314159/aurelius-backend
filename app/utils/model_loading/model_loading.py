@@ -16,11 +16,9 @@ database_instances = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    database_instance = AureliusDB()
     stt_config = STTConfig()
     stt_service = STTService(config=stt_config)
-    llm_service = LLMService(databse=database_instance)
-    database_instances["sqlite"] = database_instance
+    llm_service = LLMService()
     aurelius_models["stt"] = stt_service
     aurelius_models["llm"] = llm_service
     yield
