@@ -24,7 +24,6 @@ def get_chat_content(chat_id: int, chat_service: ChatsService = Depends()):
     """
     Gets the chat contents
     """
-
-    messages = chat_service.get_user_chats()
+    messages = chat_service.get_user_chat_content(chat_id=chat_id)
     response = {"chat_id": chat_id, "messages": messages}
-    return {"success": True, "messages": response}
+    return {"success": True, "message": response}

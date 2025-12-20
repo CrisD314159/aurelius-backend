@@ -3,7 +3,6 @@ This module contains a class that handles all the http chat methods
 """
 
 from app.db.init_db import AureliusDB
-from app.utils.model_loading.model_loading import database_instances
 
 
 class ChatsService:
@@ -12,7 +11,7 @@ class ChatsService:
     """
 
     def __init__(self):
-        self.database: AureliusDB = database_instances['sqlite']
+        self.database = AureliusDB()
 
     def get_user_chats(self):
         """
