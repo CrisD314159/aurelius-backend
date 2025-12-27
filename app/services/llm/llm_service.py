@@ -39,11 +39,12 @@ class LLMService:
         else:
             self.messages[0] = user_context_dict
 
-        if chat_id != 0:
+        if chat_id != self.current_chat:
             self.current_chat = chat_id
-            current_messages = self.db_context.get_chat_content(
+            self.messages[0] = user_context_dict
+            chat_messages = self.db_context.get_chat_content_ollama(
                 chat_id=chat_id)
-            self.messages += current_messages
+            self.messages += chat_messages
 
         self.messages += [
             {
@@ -66,7 +67,7 @@ class LLMService:
         try:
 
             response: Iterator[ChatResponse] = chat(model=model, messages=self.messages,
-                                                    stream=True)
+                                                    stream=True, tools=[self.save_new_context])
             answer = ""
 
             context: Mapping[str, Any] | None = None
@@ -75,7 +76,7 @@ class LLMService:
                 response_text = chunk.message.content
                 answer += response_text
                 if chunk.message.tool_calls:
-                    print(chunk.message.tool_calls)
+                    print("Nueva llamada", chunk.message.tool_calls)
                     for tool_call in chunk.message.tool_calls:
                         if tool_call.function.name == "save_context":
                             context = tool_call.function.arguments
@@ -84,13 +85,12 @@ class LLMService:
                 {'role': 'assistant', 'content': answer},
             ]
 
-            self.store_and_send_interaction(
-                self.messages[-1], answer, model=model, websocket=websocket)
+            await self.store_and_send_interaction(
+                self.messages[-2], answer, model=model, websocket=websocket)
 
             if context is not None:
                 self.save_new_context(context=context)
         except (ConnectionError, TimeoutError, ValueError, RuntimeError) as e:
-            print(e)
             await socket_exeption_handling(
                 ws=websocket, error_type="error",
                 message="An error occured on LLM Service, try to open Ollama",
@@ -103,7 +103,7 @@ class LLMService:
         try:
 
             response: Iterator[ChatResponse] = chat(model=model, messages=self.messages,
-                                                    stream=True)
+                                                    stream=True, tools=[self.save_new_context])
             response_buffer = ""
             entire_response = ""
 
@@ -135,8 +135,8 @@ class LLMService:
                 {'role': 'assistant', 'content': entire_response},
             ]
 
-            self.store_and_send_interaction(
-                self.messages[-1], entire_response, model=model, websocket=websocket)
+            await self.store_and_send_interaction(
+                self.messages[-2], entire_response, model=model, websocket=websocket)
 
             if context is not None:
                 self.save_new_context(context=context)
@@ -150,39 +150,58 @@ class LLMService:
         """
         This method receives and stores new context variable for aurelius personalization
         """
-        print("Nuevo contexto", context)
+        print("Nuevas memoriasasssssss", context)
         # if len(context) > 0:
         #     for memory_val in context:
         #         print(f" saved {memory_val[0]}, {memory_val[1]}")
         #         self.db_context.save_memory(
         #             key=memory_val[0], value=memory_val[1])
 
-    def store_and_send_interaction(self, user_prompt, llm_answer, model, websocket: WebSocket):
+    async def store_and_send_interaction(self,
+                                         user_prompt,
+                                         llm_answer,
+                                         model,
+                                         websocket: WebSocket):
         """
         Stores a new interaction of a chat onto the local database
         """
         user_message = user_prompt['content']
 
         if self.current_chat == 0:
-            response = chat(model=model, messages=[
+            response: ChatResponse = chat(model=model, messages=[
                 {"role": "system",
-                    "content": """Suggest a title for this chat, 
-                    give only the title in one line (40 chars max)"""},
+                    "content": """Give a short title for this new chat, 
+                    give only the title in one line (30 chars max)"""},
                 user_prompt,
                 {"role": "assistant", "content": llm_answer}
             ], stream=False)
-            title = response['message']['content']
-            print(title)
+
+            title = self.format_title(
+                response=response.message.content, user_prompt=user_message)
+            print("Titulo de nuevo chat", title)
             new_chat_id = self.db_context.create_chat(title=title)
             self.current_chat = new_chat_id
 
         interaction_info = self.db_context.store_interaction(
             chat_id=self.current_chat, user_prompt=user_message, llm_answer=llm_answer)
 
-        websocket.send_json({
+        await websocket.send_json({
             "message": interaction_info,
             "type": "answer"
         })
+
+    def format_title(self, response: str, user_prompt: str):
+        """ 
+            Returns a formatter title for a new LLM chat
+        """
+
+        if len(response) == 0:
+            return user_prompt[:30]
+
+        if response.find("\n</think>\n\n") != -1:
+            title = response.replace("\n</think>\n\n", "")
+            return title
+        return response
 
     def retrieve_user_context(self):
         """
@@ -195,10 +214,7 @@ class LLMService:
             name, model = user_data
             user_name = name
 
-        memory_lines = "\n".join(
-            f"- {key.replace('_', ' ')}: {value}"
-            for key, value in user_context_dict.items()
-        )
+        print("memorias", user_context_dict)
         user_context_message = {
             "role": "system",
             "content": f"""
@@ -210,13 +226,14 @@ class LLMService:
 
              User stored data:
 
-             {memory_lines}
+             {user_context_dict}
 
              Important rules: 
              1. Always use this information to enhance context, continuity and personalization.
              2. Do not reveal this information to the user.
-             3. If you need to store new data about the user, use the provided tool 'save_new_context' providing a list of strings. Example: ["User likes strawberries", ...].
-             4. Please do not use emojis or asterisks on your answers.
+             3. If you need to store data from the user, USE the provided tool 'save_new_context' providing a list of strings. Example: ["User likes strawberries", ...].
+             4. Please do not use emojis or asterisks on your answers. Answer ONLY using Markdown
+             5. If you include code in your answer, use triple backticks and indicate de language
                """
         }
 

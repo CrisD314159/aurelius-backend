@@ -12,8 +12,8 @@ class AureliusDB:
     def __init__(self, db_path="app/db/aurelius.db"):
         self.conn = sqlite3.connect(db_path)
         self.cursor = self.conn.cursor()
-        self._create_tables()
         self.user_id = 1
+        self._create_tables()
 
     def _create_tables(self):
         self.cursor.execute("""
@@ -115,7 +115,7 @@ class AureliusDB:
         """
         self.cursor.execute("SELECT * FROM user_memory_context")
         rows = self.cursor.fetchall()
-        return [row[0] for row in rows]
+        return [row[1] for row in rows]
 
     def get_user_model(self):
         """
@@ -138,7 +138,19 @@ class AureliusDB:
         """, (self.user_id,))
 
         rows = self.cursor.fetchall()
-        return rows if len(rows) > 0 else []
+        chats_dict = []
+        if len(rows) > 0:
+            for row in rows:
+                chats_dict.append(
+                    {
+                        "chat_id": row[0],
+                        "user_id": row[1],
+                        "title": row[2],
+                        "date_created": row[3]
+                    }
+                )
+
+        return chats_dict
 
     def get_chat_content(self, chat_id):
         """
@@ -151,7 +163,41 @@ class AureliusDB:
         """, (chat_id, ))
 
         rows = self.cursor.fetchall()
-        return rows
+        messages = []
+
+        if len(rows) > 0:
+            for row in rows:
+                messages.append({
+                    "interaction_id": row[0],
+                    "chat_id": row[1],
+                    "user_message": row[2],
+                    "model_message": row[3],
+                    "message_date": row[4]
+                })
+
+        return messages
+
+    def get_chat_content_ollama(self, chat_id):
+        """
+        Gets all the chat content including messages in ollama format
+        """
+        self.cursor.execute("""
+            SELECT * FROM chat_interactions WHERE chat_id = ?
+            ORDER BY message_date ASC
+
+        """, (chat_id, ))
+
+        rows = self.cursor.fetchall()
+
+        messages = []
+        if len(rows) > 0:
+            for row in rows:
+                messages.append(
+                    {"role": "user", "content": row[2]})
+                messages.append(
+                    {"role": "assistant", "content": row[3]})
+
+        return messages
 
     def create_chat(self, title):
         """
