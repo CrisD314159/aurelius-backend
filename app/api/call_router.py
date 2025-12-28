@@ -75,6 +75,10 @@ async def electron_prompt(websocket: WebSocket, chat_id: int):
 
                     if transcription.strip():
                         print(f"Transcription: {transcription}")
+                        await websocket.send_json({
+                            "message": transcription,
+                            "type": "transcription"
+                        })
 
                         response = await llm_service.assemble_prompt(transcription,
                                                                      websocket=websocket,
