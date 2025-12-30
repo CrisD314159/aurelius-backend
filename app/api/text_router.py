@@ -22,13 +22,13 @@ async def electron_prompt(websocket: WebSocket, chat_id: int):
     llm_service: LLMService = manager.get_llm_model()
 
     try:
-        prompt = await websocket.receive_text()
+        while True:
+            prompt = await websocket.receive_text()
 
-        await llm_service.assemble_prompt(prompt,
-                                          websocket=websocket,
-                                          chat_id=chat_id,
-                                          use_voice=False)
-
+            await llm_service.assemble_prompt(prompt,
+                                              websocket=websocket,
+                                              chat_id=chat_id,
+                                              use_voice=False)
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         print("Client disconnected")

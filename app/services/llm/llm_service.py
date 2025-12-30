@@ -3,7 +3,7 @@ This module contains a class designed to handle all the services related with ll
 """
 
 import re
-from typing import Iterator, Mapping, Any
+from typing import Iterator
 from fastapi import WebSocket
 from ollama import chat, ChatResponse
 from app.db.init_db import AureliusDB
@@ -67,29 +67,20 @@ class LLMService:
         try:
 
             response: Iterator[ChatResponse] = chat(model=model, messages=self.messages,
-                                                    stream=True, tools=[self.save_new_context])
+                                                    stream=True)
             answer = ""
-
-            context: Mapping[str, Any] | None = None
 
             for chunk in response:
                 response_text = chunk.message.content
                 answer += response_text
-                if chunk.message.tool_calls:
-                    print("Nueva llamada", chunk.message.tool_calls)
-                    for tool_call in chunk.message.tool_calls:
-                        if tool_call.function.name == "save_context":
-                            context = tool_call.function.arguments
 
             self.messages += [
                 {'role': 'assistant', 'content': answer},
             ]
 
             await self.store_and_send_interaction(
-                self.messages[-2], answer, model=model, websocket=websocket)
+                self.messages[-2], answer, websocket=websocket)
 
-            if context is not None:
-                self.save_new_context(context=context)
         except (ConnectionError, TimeoutError, ValueError, RuntimeError) as e:
             await socket_exeption_handling(
                 ws=websocket, error_type="error",
@@ -103,22 +94,15 @@ class LLMService:
         try:
 
             response: Iterator[ChatResponse] = chat(model=model, messages=self.messages,
-                                                    stream=True, tools=[self.save_new_context])
+                                                    stream=True)
             response_buffer = ""
             entire_response = ""
-
-            context: Mapping[str, Any] | None = None
 
             for chunk in response:
                 response_text = chunk.message.content
                 entire_response += response_text
                 response_buffer += response_text
                 parts = self.sentence_separator.split(response_buffer)
-                if chunk.message.tool_calls:
-                    print(chunk.message.tool_calls)
-                    for tool_call in chunk.message.tool_calls:
-                        if tool_call.function.name == "save_context":
-                            context = tool_call.function.arguments
                 if len(parts) > 1:
                     for sentence in parts[:-1]:
                         if sentence.strip() and len(sentence.strip()) > 3:
@@ -136,31 +120,17 @@ class LLMService:
             ]
 
             await self.store_and_send_interaction(
-                self.messages[-2], entire_response, model=model, websocket=websocket)
+                self.messages[-2], entire_response, websocket=websocket)
 
-            if context is not None:
-                self.save_new_context(context=context)
         except (ConnectionError, TimeoutError, ValueError, RuntimeError) as e:
             await socket_exeption_handling(
                 ws=websocket, error_type="error",
                 message="An error occured on LLM Service, try to open Ollama",
                 details=str(e))
 
-    def save_new_context(self, context):
-        """
-        This method receives and stores new context variable for aurelius personalization
-        """
-        print("Nuevas memoriasasssssss", context)
-        # if len(context) > 0:
-        #     for memory_val in context:
-        #         print(f" saved {memory_val[0]}, {memory_val[1]}")
-        #         self.db_context.save_memory(
-        #             key=memory_val[0], value=memory_val[1])
-
     async def store_and_send_interaction(self,
                                          user_prompt,
                                          llm_answer,
-                                         model,
                                          websocket: WebSocket):
         """
         Stores a new interaction of a chat onto the local database
@@ -168,16 +138,7 @@ class LLMService:
         user_message = user_prompt['content']
 
         if self.current_chat == 0:
-            response: ChatResponse = chat(model=model, messages=[
-                {"role": "system",
-                    "content": """Give a short title for this new chat, 
-                    give only the title in one line (30 chars max)"""},
-                user_prompt,
-                {"role": "assistant", "content": llm_answer}
-            ], stream=False)
-
-            title = self.format_title(
-                response=response.message.content, user_prompt=user_message)
+            title = f"{user_message[:30]}..."
             print("Titulo de nuevo chat", title)
             new_chat_id = self.db_context.create_chat(title=title)
             self.current_chat = new_chat_id
@@ -190,43 +151,22 @@ class LLMService:
             "type": "answer"
         })
 
-    def format_title(self, response: str, user_prompt: str):
-        """ 
-            Returns a formatter title for a new LLM chat
-        """
-
-        if len(response) == 0:
-            return user_prompt[:30]
-
-        if response.find("\n</think>\n\n") != -1:
-            title = response.replace("\n</think>\n\n", "")
-            return title
-        return response
-
     def retrieve_user_context(self):
         """
         Retrieves the user stored context
         """
-        user_context_dict = self.db_context.load_memory()
         user_data = self.db_context.get_user_data()
         user_name = "Not provided"
         if user_data:
             name, model = user_data
             user_name = name
-
-        print("memorias", user_context_dict)
         user_context_message = {
             "role": "system",
             "content": f"""
-            User context store data:
+            
             As an intelligent assistant called Aurelius you are going to provide 
-            clear, helpful and reliable responses using user's stored data.
-
+            clear, helpful and reliable responses To the user.
              User name: {user_name}
-
-             User stored data:
-
-             {user_context_dict}
 
              Important rules: 
              1. Always use this information to enhance context, continuity and personalization.

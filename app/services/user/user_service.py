@@ -45,10 +45,7 @@ class UserService:
             model_list = ollama.list()
             available_models = []
             for model in model_list.get('models', []):
-                model_info = ollama.show(model.get('model'))
-                template = model_info.get('template', '')
-                if 'tool' in template.lower() or 'function' in template.lower():
-                    available_models.append(dict(model))
+                available_models.append(dict(model))
             return available_models
         except Exception as e:
             raise UnexpectedError(
