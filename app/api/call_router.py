@@ -39,8 +39,6 @@ async def electron_prompt(websocket: WebSocket, chat_id: int):
             chunk = await websocket.receive_bytes()
             audio_buffer.extend(chunk)
 
-            # TODO : Add interrupt functionality
-
             if manager.is_silence(chunk):
                 silence_counter += 1
             else:

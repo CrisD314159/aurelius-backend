@@ -26,3 +26,6 @@ class ChatsService:
         """
         chat_content = self.database.get_chat_content(chat_id=chat_id)
         return chat_content
+
+    def delete_chat(self, chat_id):
+        self.database.delete_chat(chat_id=chat_id)

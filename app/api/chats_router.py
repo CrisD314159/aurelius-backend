@@ -27,3 +27,12 @@ def get_chat_content(chat_id: int, chat_service: ChatsService = Depends()):
     messages = chat_service.get_user_chat_content(chat_id=chat_id)
     response = {"chat_id": chat_id, "messages": messages}
     return {"success": True, "message": response}
+
+
+@chats_router.delete("/chats/{chat_id}")
+def delete_chat(chat_id: int, chat_service: ChatsService = Depends()):
+    """
+    Deletes a chat from the local database
+    """
+    chat_service.delete_chat(chat_id=chat_id)
+    return {"success": True, "message": "Chat deleted successfully"}
