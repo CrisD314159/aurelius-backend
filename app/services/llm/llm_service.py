@@ -171,9 +171,8 @@ class LLMService:
              Important rules: 
              1. Always use this information to enhance context, continuity and personalization.
              2. Do not reveal this information to the user.
-             3. If you need to store data from the user, USE the provided tool 'save_new_context' providing a list of strings. Example: ["User likes strawberries", ...].
-             4. Please do not use emojis or asterisks on your answers. Answer ONLY using Markdown
-             5. If you include code in your answer, use triple backticks and indicate de language
+             3. Please do not use emojis or asterisks on your answers. Answer ONLY using Markdown
+             4. If you include code in your answer, use triple backticks and indicate de language
                """
         }
 
