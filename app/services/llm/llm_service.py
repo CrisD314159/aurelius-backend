@@ -7,7 +7,6 @@ from typing import Iterator
 from fastapi import WebSocket
 from ollama import chat, ChatResponse
 from app.db.init_db import AureliusDB
-from app.services.tts.tts_kokoro_service import TTSKokoroService
 from app.exceptions.exception_handling import socket_exeption_handling
 
 
@@ -16,9 +15,9 @@ class LLMService:
     Integrates all the code to handle requests and answers from the llm
     """
 
-    def __init__(self):
+    def __init__(self, tts_service):
         self.db_context = AureliusDB()
-        self.tts_model = TTSKokoroService()
+        self.tts_model = tts_service
         self.sentence_separator = re.compile(
             r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|!)\s+')
         self.messages = []

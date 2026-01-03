@@ -14,3 +14,9 @@ app/stt_models/*
 
 #Local database
 app/db/aurelius.db
+
+#build app
+build/
+
+#distribution app
+dist/

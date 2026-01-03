@@ -4,8 +4,6 @@ a communication between frontend and backend using websockets"""
 import io
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.utils.wav_converter.wav_converter import WavConverter
-from app.services.stt.stt_service import STTService
-from app.services.llm.llm_service import LLMService
 from app.api.connection_manager import ConnectionManager
 
 
@@ -27,8 +25,8 @@ async def electron_prompt(websocket: WebSocket, chat_id: int):
     """
     await manager.connect(websocket=websocket)
 
-    stt_service: STTService = manager.get_stt_model()
-    llm_service: LLMService = manager.get_llm_model()
+    stt_service = manager.get_stt_model()
+    llm_service = manager.get_llm_model()
 
     audio_buffer = bytearray()
     silence_counter = 0

@@ -2,7 +2,6 @@
 a communication between frontend and backend using websockets"""
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from app.services.llm.llm_service import LLMService
 from app.api.connection_manager import ConnectionManager
 
 
@@ -19,7 +18,7 @@ async def electron_prompt(websocket: WebSocket, chat_id: int):
     :type websocket: WebSocket
     """
     await manager.connect(websocket=websocket)
-    llm_service: LLMService = manager.get_llm_model()
+    llm_service = manager.get_llm_model()
 
     try:
         while True:
