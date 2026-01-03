@@ -1,16 +1,9 @@
 """Init"""
 import multiprocessing
-import os
-import sys
 
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-
-    if not os.environ.get('MAIN_PROCESS'):
-        os.environ['MAIN_PROCESS'] = '1'
-    else:
-        sys.exit(0)  # Exit if already initialized
 
     import uvicorn
     from app.main import app
