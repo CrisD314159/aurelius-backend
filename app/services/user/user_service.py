@@ -1,7 +1,7 @@
 """
 This module contains a class to satisfy user requirements
 """
-import subprocess
+import httpx
 import ollama
 from app.exceptions.exception_handling import UnexpectedError, NotFoundException
 from app.db.init_db import AureliusDB
@@ -19,18 +19,14 @@ class UserService:
 
     def is_ollama_installed(self):
         """
-        This method verifies id ollama is installed on the user's machine
-
-        :param self: Description
+        This method verifies if ollama server is running and accessible
         """
-
         try:
-            subprocess.check_output(
-                ["ollama", "--version"], stderr=subprocess.STDOUT)
-            return True
-        except FileNotFoundError:
+            response = httpx.get('http://localhost:11434/api/tags', timeout=5)
+            return response.status_code == 200
+        except httpx.ConnectError:
             return False
-        except subprocess.CalledProcessError:
+        except httpx.TimeoutException:
             return False
         except OSError:
             return False
