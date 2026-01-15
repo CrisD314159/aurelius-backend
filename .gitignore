@@ -15,6 +15,9 @@ app/stt_models/*
 #Local database
 app/db/aurelius.db
 
+# venv win
+venv
+
 #build app
 build/
 
