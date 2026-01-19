@@ -5,10 +5,7 @@ This module initializes on the background
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from app.services.stt.stt_config import STTConfig
-from app.services.stt.stt_service import STTService
-from app.services.llm.llm_service import LLMService
-from app.db.init_db import AureliusDB
+
 
 aurelius_models = {}
 database_instances = {}
@@ -16,10 +13,19 @@ database_instances = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    stt_config = STTConfig()
-    stt_service = STTService(config=stt_config)
+
+    # Import only when lifespan actually runs (after freeze_support)
+    print("Starting model initialization...")
+
+    from app.services.llm.llm_service import LLMService
+
     llm_service = LLMService()
-    aurelius_models["stt"] = stt_service
     aurelius_models["llm"] = llm_service
+
+    _initialized = True
+    print("Model initialization complete.")
+
     yield
+    print("Shutting down models...")
     aurelius_models.clear()
+    _initialized = False
